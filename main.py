@@ -143,12 +143,10 @@ class Parser:
                     for link_image in link_image_found:
                         try:
                             images.append(f"{link_image.find('img')['data-zoom']}")
-                        except Exception as exc:
+                        except Exception:
                             continue
-
-                    self.article_imgs[article] = list(set(images))
-
-
+                    # берётся 2 и 3 фото
+                    self.article_imgs[article] = images[1:3]
 
         except Exception as exc:
             print(f'Ошибка {exc} в получении ссылок на товары')
@@ -199,8 +197,7 @@ class Parser:
         async with aiohttp.ClientSession() as session:
             tasks = []
             for link in self.article_imgs:
-                # urls=self.article_imgs[link][:2] берёт только 2 изображения
-                task = asyncio.create_task(self.save_images(session, urls=self.article_imgs[link][:2], name_img=link))
+                task = asyncio.create_task(self.save_images(session, urls=self.article_imgs[link], name_img=link))
                 tasks.append(task)
                 await asyncio.gather(*tasks)
 
@@ -337,7 +334,6 @@ class Parser:
     def run(self):
         try:
             # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
             print('Начало работы')
             self.open_token_file()
             self.read_file()
