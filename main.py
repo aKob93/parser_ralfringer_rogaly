@@ -204,7 +204,7 @@ class Parser:
     def resize_img(self):
         try:
             ImageFile.LOAD_TRUNCATED_IMAGES = True
-            fixed_height = 426
+            fixed_height = 250
             for img_file in tqdm(os.listdir('./img/')):
                 if img_file[-4:] == '.jpg':
                     img = Image.open(f'./img/{img_file}')
@@ -333,7 +333,7 @@ class Parser:
 
     def run(self):
         try:
-            # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
             print('Начало работы')
             self.open_token_file()
             self.read_file()
