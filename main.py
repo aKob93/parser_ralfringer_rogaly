@@ -211,7 +211,6 @@ class Parser:
                 task = asyncio.create_task(self.save_images(session, urls=self.article_imgs[link], name_img=link))
                 tasks.append(task)
                 await asyncio.gather(*tasks)
-        print(self.article_imgs)
 
     def resize_img(self):
         try:
@@ -299,7 +298,6 @@ class Parser:
                 except FileNotFoundError:
                     continue
                 self.article_save_imgs[img_url] = img_short_link
-        print(self.article_save_imgs)
 
     def write_final_file_data1(self):
         try:
