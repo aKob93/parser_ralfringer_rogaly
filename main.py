@@ -27,6 +27,7 @@ class Parser:
         self.secret_key = ''
         self.active_token = ''
         self.active_secret_key = ''
+        self.active_number = 0
         self.base_url = 'https://ralf.ru'
         self.transliteration_dict = {'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e',
                                      'ё': 'yo', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k',
@@ -74,13 +75,19 @@ class Parser:
             sheets = wb.sheetnames
             ws = wb[sheets[0]]
 
-            for row in ws.iter_cols(min_col=2, max_col=2, min_row=2):
+            for row in ws.iter_cols(min_col=3, max_col=3, min_row=3):
                 for cell in row:
                     if cell.value is None:
                         continue
-                    self.article_numbers.append(cell.value.strip())
+                    value = cell.value
+                    if type(value) == str:
+
+                        self.article_numbers.append(value.strip())
+                    elif type(value) == int:
+                        self.article_numbers.append(str(value))
 
             self.article_numbers = list(dict.fromkeys(self.article_numbers))
+
         except Exception as exc:
             print(f'Ошибка {exc} в чтении табличного документа data1.xlsx')
             with open('error.txt', 'a', encoding='utf-8') as file:
@@ -145,8 +152,12 @@ class Parser:
                             images.append(f"{link_image.find('img')['data-zoom']}")
                         except Exception:
                             continue
+
+                    if len(images) == 1:
+                        self.article_imgs[article] = images
                     # берётся 2 и 3 фото
-                    self.article_imgs[article] = images[1:3]
+                    else:
+                        self.article_imgs[article] = images[1:3]
 
         except Exception as exc:
             print(f'Ошибка {exc} в получении ссылок на товары')
@@ -194,12 +205,13 @@ class Parser:
     async def save_images_run_async(self):
         if not os.path.isdir('./img/'):
             os.mkdir('./img/')
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(headers=self.headers) as session:
             tasks = []
             for link in self.article_imgs:
                 task = asyncio.create_task(self.save_images(session, urls=self.article_imgs[link], name_img=link))
                 tasks.append(task)
                 await asyncio.gather(*tasks)
+        print(self.article_imgs)
 
     def resize_img(self):
         try:
@@ -267,10 +279,11 @@ class Parser:
                         continue
                     elif response.json()["error"]["message"] == \
                             'Exceeded the daily limit of uploaded images for your account':
-                        print('Переключение на второй аккаунт')
-
-                        self.active_token = self.token[1]
-                        self.active_secret_key = self.secret_key[1]
+                        print('Переключение на следующий аккаунт')
+                        # если аккаунт сменился то активный номер +1 и активный токен берётся следующий
+                        self.active_number += 1
+                        self.active_token = self.token[self.active_number]
+                        self.active_secret_key = self.secret_key[self.active_number]
 
                         files = {
                             'image': open(img, 'rb'),
@@ -286,22 +299,23 @@ class Parser:
                 except FileNotFoundError:
                     continue
                 self.article_save_imgs[img_url] = img_short_link
+        print(self.article_save_imgs)
 
     def write_final_file_data1(self):
         try:
             if not os.path.isdir('./final_data/'):
                 os.mkdir('./final_data/')
-            columns = ['BB', 'BC', 'BD']
+            columns = ['O', 'P', 'Q']
             wb = load_workbook(filename=self.read_data1_file)
             ws = wb.active
 
-            ws['BB1'] = 'Ссылки на фотографии'
+            ws['O3'] = 'Ссылки на фотографии'
             date_now = datetime.datetime.now()
             for article in self.article_save_imgs:
                 for i, link in enumerate(self.article_save_imgs[article]):
-                    for row in ws.iter_cols(min_col=2, max_col=2, min_row=2):
+                    for row in ws.iter_cols(min_col=3, max_col=3, min_row=3):
                         for cell in row:
-                            if cell.value.strip() in article:
+                            if str(cell.value).strip() in article:
                                 ws[f'{columns[i]}{cell.row}'] = link
 
             file_name = f'./final_data/data1_final_{date_now.strftime("%d-%m-%y_%H-%M")}.xlsx'
@@ -327,7 +341,8 @@ class Parser:
                 for i, link in enumerate(self.article_save_imgs[article]):
                     for row in ws.iter_cols(min_col=5, max_col=5, min_row=8):
                         for cell in row:
-                            if cell.value.strip() in article:
+
+                            if str(cell.value).strip() in article:
                                 ws[f'{columns[i]}{cell.row}'] = link
 
             file_name = f'./final_data/data2_final_{date_now.strftime("%d-%m-%y_%H-%M")}.xlsx'
