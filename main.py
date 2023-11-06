@@ -39,8 +39,8 @@ class Parser:
         self.links_products = {}
         self.article_imgs = {}
         self.article_save_imgs = {}
-        self.read_data1_file = ''
-        self.read_data2_file = ''
+        self.read_data_file = ''
+        # self.read_data2_file = ''
 
     def open_token_file(self):
         try:
@@ -57,25 +57,25 @@ class Parser:
     def read_file(self):
         try:
             for file in os.listdir():
-                if file[:6] == 'data1.':
+                if file[:5] == 'data.':
                     print(f'Получаю артикул товаров из файла {file}')
-                    self.read_data1_file = file
+                    self.read_data_file = file
                     self.get_article_number_data1()
-                if file[:6] == 'data2.':
-                    print(f'Получаю артикул товаров из файла {file}')
-                    self.read_data2_file = file
-                    self.get_article_number_data2()
+                # if file[:6] == 'data2.':
+                #     print(f'Получаю артикул товаров из файла {file}')
+                #     self.read_data2_file = file
+                #     self.get_article_number_data2()
         except Exception:
             print('Нет файла с именем data.')
             raise IndexError
 
     def get_article_number_data1(self):
         try:
-            wb = load_workbook(filename=self.read_data1_file)
+            wb = load_workbook(filename=self.read_data_file)
             sheets = wb.sheetnames
             ws = wb[sheets[0]]
 
-            for row in ws.iter_cols(min_col=3, max_col=3, min_row=3):
+            for row in ws.iter_cols(min_col=2, max_col=2, min_row=9):
                 for cell in row:
                     if cell.value is None:
                         continue
@@ -96,25 +96,25 @@ class Parser:
                            f'Ошибка {exc} в чтении табличного документа data1.xlsm, функция - get_article_number()\n')
             raise IndexError
 
-    def get_article_number_data2(self):
-        try:
-            wb = load_workbook(filename=self.read_data2_file)
-            sheets = wb.sheetnames
-            ws = wb[sheets[0]]
-
-            for row in ws.iter_cols(min_col=5, max_col=5, min_row=8):
-                for cell in row:
-                    if cell.value is None:
-                        continue
-                    self.article_numbers.append(cell.value.strip())
-
-        except Exception as exc:
-            print(f'Ошибка {exc} в чтении табличного документа data2.xlsx')
-            with open('error.txt', 'a', encoding='utf-8') as file:
-
-                file.write(f'{datetime.datetime.now().strftime("%d-%m-%y %H:%M")} '
-                           f'Ошибка {exc} в чтении табличного документа data2.xlsm, функция - get_article_number()\n')
-            raise IndexError
+    # def get_article_number_data2(self):
+    #     try:
+    #         wb = load_workbook(filename=self.read_data2_file)
+    #         sheets = wb.sheetnames
+    #         ws = wb[sheets[0]]
+    #
+    #         for row in ws.iter_cols(min_col=5, max_col=5, min_row=8):
+    #             for cell in row:
+    #                 if cell.value is None:
+    #                     continue
+    #                 self.article_numbers.append(cell.value.strip())
+    #
+    #     except Exception as exc:
+    #         print(f'Ошибка {exc} в чтении табличного документа data2.xlsx')
+    #         with open('error.txt', 'a', encoding='utf-8') as file:
+    #
+    #             file.write(f'{datetime.datetime.now().strftime("%d-%m-%y %H:%M")} '
+    #                        f'Ошибка {exc} в чтении табличного документа data2.xlsm, функция - get_article_number()\n')
+    #         raise IndexError
 
     # замена букв кириллицы на латиницу
     def transliteration_article(self, article):
@@ -132,7 +132,6 @@ class Parser:
 
     async def get_link_img(self, session, article, translated_article):
         try:
-
             retry_options = ExponentialRetry(attempts=3)
             retry_client = RetryClient(raise_for_status=False, retry_options=retry_options, client_session=session,
                                        start_timeout=0.5)
@@ -141,9 +140,8 @@ class Parser:
                 if response.ok:
                     sys.stdout.write("\r")
                     sys.stdout.write(f'Получаю ссылку на товар {article}')
-                    sys.stdout.flush()
-
-                    resp = await response.text()
+                    # изменил строчку, раньше было await response.text()
+                    resp = await response.content.read()
                     soup = BeautifulSoup(resp, features='lxml')
                     link_image_found = soup.find_all('div', class_='swiper-slide')
                     images = []
@@ -240,10 +238,11 @@ class Parser:
                            f'Ошибка {exc} в изменении разрешения изображений, функция - resize_img()\n')
 
     def sending_to_fotohosting(self):
-        self.active_token = self.token[0]
-        self.active_secret_key = self.secret_key[0]
+        self.active_token = self.token[self.active_number]
+        self.active_secret_key = self.secret_key[self.active_number]
+        # ИЗМЕНЕНИЕ 'Authorization': f'TOKEN {self.active_token}' НА 'Authorization': f'Bearer {self.active_secret_key}'
         headers = {
-            'Authorization': f'TOKEN {self.active_token}',
+            'Authorization': f'Bearer {self.active_secret_key}',
         }
         for img_url in self.article_imgs:
 
@@ -258,9 +257,10 @@ class Parser:
             for img in img_links:
 
                 try:
+                    # ИЗМЕНЕНИE 'image': open(img, 'rb'), 'secret_key': (None, self.active_secret_key) НА
+                    # 'image': open(img, 'rb'). Удалено поле secret_key
                     files = {
                         'image': open(img, 'rb'),
-                        'secret_key': (None, self.active_secret_key),
                     }
                     response = requests.post('https://api.imageban.ru/v1', headers=headers, files=files)
                     if response.json()['status'] == 200:
@@ -270,6 +270,7 @@ class Parser:
                         print(f'Не удалось загрузить {img}')
                         continue
                 except KeyError:
+                    print(response.json()["error"]["message"])
                     print(f'{img_url} ошибка загрузки изображения - {response.json()["error"]["message"]}\n')
                     with open('error.txt', 'a', encoding='utf-8') as file:
                         file.write(f'{datetime.datetime.now().strftime("%d-%m-%y %H:%M")} '
@@ -283,10 +284,12 @@ class Parser:
                         self.active_number += 1
                         self.active_token = self.token[self.active_number]
                         self.active_secret_key = self.secret_key[self.active_number]
-
+                        # ТУТ ТОЖЕ ИЗМЕНЕНИЕ
+                        headers = {
+                            'Authorization': f'Bearer {self.active_secret_key}',
+                        }
                         files = {
                             'image': open(img, 'rb'),
-                            'secret_key': (None, self.active_secret_key),
                         }
                         response = requests.post('https://api.imageban.ru/v1', headers=headers, files=files)
                         if response.json()['status'] == 200:
@@ -297,6 +300,8 @@ class Parser:
                     continue
                 except FileNotFoundError:
                     continue
+                except requests.exceptions.ConnectTimeout:
+                    print("")
                 self.article_save_imgs[img_url] = img_short_link
 
     def write_final_file_data1(self):
@@ -304,19 +309,19 @@ class Parser:
             if not os.path.isdir('./final_data/'):
                 os.mkdir('./final_data/')
             columns = ['O', 'P', 'Q']
-            wb = load_workbook(filename=self.read_data1_file)
+            wb = load_workbook(filename=self.read_data_file)
             ws = wb.active
 
-            ws['O3'] = 'Ссылки на фотографии'
+            ws['O1'] = 'Ссылки на фотографии'
             date_now = datetime.datetime.now()
             for article in self.article_save_imgs:
                 for i, link in enumerate(self.article_save_imgs[article]):
-                    for row in ws.iter_cols(min_col=3, max_col=3, min_row=3):
+                    for row in ws.iter_cols(min_col=2, max_col=2, min_row=9):
                         for cell in row:
                             if str(cell.value).strip() in article:
                                 ws[f'{columns[i]}{cell.row}'] = link
 
-            file_name = f'./final_data/data1_final_{date_now.strftime("%d-%m-%y_%H-%M")}.xlsx'
+            file_name = f'./final_data/data_final_{date_now.strftime("%d-%m-%y_%H-%M")}.xlsx'
             wb.save(filename=file_name)
             print(f'Файл {file_name} сохранён')
         except Exception as exc:
@@ -325,32 +330,32 @@ class Parser:
                 file.write(f'{datetime.datetime.now().strftime("%d-%m-%y %H:%M")} '
                            f'Ошибка {exc} в записи итогового файла, функция - write_final_file_data1()\n')
 
-    def write_final_file_data2(self):
-        try:
-            if not os.path.isdir('./final_data/'):
-                os.mkdir('./final_data/')
-            columns = ['BG', 'BH', 'BI']
-            wb = load_workbook(filename=self.read_data2_file)
-            ws = wb.active
-
-            ws['BG7'] = 'Ссылки на фотографии'
-            date_now = datetime.datetime.now()
-            for article in self.article_save_imgs:
-                for i, link in enumerate(self.article_save_imgs[article]):
-                    for row in ws.iter_cols(min_col=5, max_col=5, min_row=8):
-                        for cell in row:
-
-                            if str(cell.value).strip() in article:
-                                ws[f'{columns[i]}{cell.row}'] = link
-
-            file_name = f'./final_data/data2_final_{date_now.strftime("%d-%m-%y_%H-%M")}.xlsx'
-            wb.save(filename=file_name)
-            print(f'Файл {file_name} сохранён')
-        except Exception as exc:
-            print(f'Ошибка {exc} в записи итогового файла')
-            with open('error.txt', 'a', encoding='utf-8') as file:
-                file.write(f'{datetime.datetime.now().strftime("%d-%m-%y %H:%M")} '
-                           f'Ошибка {exc} в записи итогового файла, функция - write_final_file_data2()\n')
+    # def write_final_file_data2(self):
+    #     try:
+    #         if not os.path.isdir('./final_data/'):
+    #             os.mkdir('./final_data/')
+    #         columns = ['BG', 'BH', 'BI']
+    #         wb = load_workbook(filename=self.read_data2_file)
+    #         ws = wb.active
+    #
+    #         ws['BG7'] = 'Ссылки на фотографии'
+    #         date_now = datetime.datetime.now()
+    #         for article in self.article_save_imgs:
+    #             for i, link in enumerate(self.article_save_imgs[article]):
+    #                 for row in ws.iter_cols(min_col=5, max_col=5, min_row=8):
+    #                     for cell in row:
+    #
+    #                         if str(cell.value).strip() in article:
+    #                             ws[f'{columns[i]}{cell.row}'] = link
+    #
+    #         file_name = f'./final_data/data2_final_{date_now.strftime("%d-%m-%y_%H-%M")}.xlsx'
+    #         wb.save(filename=file_name)
+    #         print(f'Файл {file_name} сохранён')
+    #     except Exception as exc:
+    #         print(f'Ошибка {exc} в записи итогового файла')
+    #         with open('error.txt', 'a', encoding='utf-8') as file:
+    #             file.write(f'{datetime.datetime.now().strftime("%d-%m-%y %H:%M")} '
+    #                        f'Ошибка {exc} в записи итогового файла, функция - write_final_file_data2()\n')
 
     def run(self):
         try:
@@ -376,10 +381,10 @@ class Parser:
             self.sending_to_fotohosting()
             print('\nЗагрузка завершена')
             print('---------------------------\n')
-            print('Записываю в итоговый файл data1_final')
+            print('Записываю в итоговый файл data_final')
             self.write_final_file_data1()
-            print('Записываю в итоговый файл data2_final')
-            self.write_final_file_data2()
+            # print('Записываю в итоговый файл data2_final')
+            # self.write_final_file_data2()
             print('Работа завершена')
             print('Для выхода нажмите Enter')
             input()
